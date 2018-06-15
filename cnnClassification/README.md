@@ -272,7 +272,15 @@ def log_histogram(writer, tag, values, step, bins=1000):
 ```
 ## 5 Training Model#1
 ### 5.1 Structure
-The structure of this model includes a convolution layer with relu followed by pooling followed by a fully connected layer with relu activation and output layer with softmax.
+
+Following is the layer structure
+* convolution
+* relu
+* maxpooling
+* fully connected layer
+* relu
+* fully connected layer
+* softmax
 
 ```python
 """Input is 4 dimensional tensor -1 so that the no of images can be infered on itself"""
@@ -345,7 +353,19 @@ The model was trained for 50 epochs and at end of 50 epochs the train accuracy w
 
 ## 6 Training Model#2
 ### 6.1 Structure
-For second setup Convolution layer is followed by selu layer followed by pooling followed by batch normalization followed by pooling followed by two fc with selu activation function.
+Following is the layer structure
+* Convolution
+* SELU
+* Pooling
+* Batch Normalization
+* Pooling
+* Fully connected layer
+* SELU
+* Fully connected layer
+* SELU
+* Fully connected layer
+* Softmax
+
 ```python
 """Input is 4 dimensional tensor -1 so that the no of images can be infered on itself"""
 inputLayer = tf.placeholder(tf.float32, [None, 32, 32, 3])
@@ -416,3 +436,456 @@ The model was trained for 50 epochs. The training accuracy at end of 50 epochs i
 ![image](https://drive.google.com/uc?export=view&id=1ET6rwcvaY4hMfd_sz2uq4zl6q-LekPpc)
 ![image](https://drive.google.com/uc?export=view&id=1QrVuRX6mudyxJTrDz6dLEdkotYAmDh_6)
 ![image](https://drive.google.com/uc?export=view&id=1mkMtM2edidZNwhgaxdhIUdH_p3CEL3tR)
+
+## 7. Training model#3
+
+### 7.1 Structure
+The structure for model 3 is as follows
+
+* Input layer
+* Convolution
+* RELU
+* Pooling
+* Convolution
+* RELU
+* Pooling
+* Flattened
+* Fully connected layer
+* RELU
+* Fully connected layer
+* RELU
+* Fully connected layer
+* Softmax
+
+```python
+"""Input is 4 dimensional tensor -1 so that the no of images
+can be infered on itself"""
+inputLayer = tf.placeholder(tf.float32, [None, 32, 32, 3], name="inputLayer")
+yTrue = tf.placeholder(tf.float32, shape=[None, 10], name="yTrue")
+
+convolutionLayer1 = createConvolutionLayer(inputLayer, 2, 2, 32, 1, 1, "convolutionLayer1")
+reluActivated1 = tf.nn.relu(convolutionLayer1, name = "relu1")
+poolingLayer1 = tf.layers.max_pooling2d(inputs=reluActivated1, pool_size=[2, 2],
+                                        strides = [1, 1], padding='SAME',
+                                         name="poolingLayer1")
+convolutionLayer2 = createConvolutionLayer(poolingLayer1, 2, 2, 20, 1, 1,
+                              "convolutionLayer2")
+
+reluActivated2 = tf.nn.relu(convolutionLayer2, name = "relu2")
+poolingLayer2 = tf.layers.max_pooling2d(inputs=reluActivated2, pool_size=[2, 2],
+                                        strides = [2, 2], padding='SAME',
+                                         name="poolingLayer2")
+
+flattened = flattenLayer(poolingLayer2, name = "flattenedLayer")
+fc1 = fullyConnectedLayer(flattened, 1000)
+reluActivated3 = tf.nn.relu(fc1, name = "relu3")
+fc2 = fullyConnectedLayer(reluActivated3, 500)
+reluActivated4 = tf.nn.relu(fc2, name = "relu4")
+output = fullyConnectedLayer(reluActivated4, 10)
+```
+
+![image](https://drive.google.com/uc?export=view&id=1fsLA8PIfxrWQ9u-MtVoFqKaBrLpYFszv)
+### 7.2 Loss function
+Softmax with gradient descent optimizer is used.
+```python
+predictions = tf.argmax(tf.nn.softmax(output), axis = 1)
+actual = tf.argmax(yTrue, axis = 1)
+loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=output, labels = yTrue)
+costFunction = tf.reduce_mean(loss)
+optimizer = tf.train.GradientDescentOptimizer(learning_rate=1e-2).minimize(costFunction)
+accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, actual), tf.float32))
+```
+
+### 7.3 Training
+```python
+session = tf.Session()
+"""Initialize the global variables"""
+session.run(tf.global_variables_initializer())
+summaryWriter =  tf.summary.FileWriter("tensorboard/structure3/logs",
+ graph=tf.get_default_graph())
+trainAccList = []
+testAccList = []
+for i in range(0, 20):
+    print("Epoch "+str(i))
+    summary = tf.Summary()
+
+    for x, y in batchIterator(trainX, trainY, 500, 100):
+        session.run(optimizer, feed_dict={inputLayer:x, yTrue:y})
+
+    loss = session.run(costFunction, feed_dict={inputLayer:x, yTrue:y})
+    acc = session.run(accuracy, feed_dict={inputLayer:x, yTrue:y})    
+    summary.value.add(tag = "TrainingLoss", simple_value = loss)
+    summary.value.add(tag = "TrainingAcc", simple_value = acc)
+    trainAccList.append(acc)
+
+    lossTestList = []
+    accTestList = []
+    for x, y in batchIterator(processedTestX, processedTestY, 1000, 5):
+        lossTest = session.run(costFunction, feed_dict={inputLayer:x, yTrue:y})
+        accTest = session.run(accuracy, feed_dict={inputLayer:x, yTrue:y})
+        lossTestList.append(lossTest)
+        accTestList.append(accTest)
+    print(np.mean(accTestList))
+    summary.value.add(tag = "TestLoss", simple_value = np.mean(lossTestList))
+    summary.value.add(tag = "TestAcc", simple_value = np.mean(accTestList))
+    testAccList.append(np.mean(accTestList))
+    summaryWriter.add_summary(summary, i)
+
+log_histogram(summaryWriter, "TrainAccHist", trainAccList, 50)
+log_histogram(summaryWriter, "TestAccHist", testAccList, 50)
+session.close()    
+```
+### 7.4 Performance
+After 20 iterations the accuracy on test set is 64%
+
+![image](https://drive.google.com/uc?export=view&id=1l9ZErgWR2g8yyXaTkMekPlHgk6oS3ukO)
+![image](https://drive.google.com/uc?export=view&id=10P_I4d_wXCJ_zBw74MnMoGnuXhut8GJW)
+![image](https://drive.google.com/uc?export=view&id=1rBp_Q4aNO4sNmgiMwCaaEpjWss1rJGhG)
+
+
+## 8 Training model#4
+
+### 8.1 Structure
+The structure for model 4 is similar to model 3 with batch normalization.
+* Input layer
+* Convolution
+* RELU
+* Pooling
+* Batch Normalization
+* Convolution
+* RELU
+* Pooling
+* Batch Normalization
+* Flattened
+* Fully connected layer
+* RELU
+* Fully connected layer
+* RELU
+* Fully connected layer
+* Softmax
+
+```python
+"""Input is 4 dimensional tensor -1 so that the no of images can be infered on itself"""
+inputLayer = tf.placeholder(tf.float32, [None, 32, 32, 3], name="inputLayer")
+yTrue = tf.placeholder(tf.float32, shape=[None, 10], name="yTrue")
+isTraining = tf.placeholder(tf.bool, [])
+
+
+convolutionLayer1 = createConvolutionLayer(inputLayer, 2, 2, 32, 1, 1,
+ "convolutionLayer1")
+reluActivated1 = tf.nn.relu(convolutionLayer1, name = "relu1")
+poolingLayer1 = tf.layers.max_pooling2d(inputs=reluActivated1, pool_size=[2, 2],
+                                        strides = [1, 1], padding='SAME',
+                                         name="poolingLayer1")
+
+bn1 = batchNormalization(poolingLayer1, isTraining, "batchNormalization1")
+convolutionLayer2 = createConvolutionLayer(bn1, 2, 2, 20, 1, 1, "convolutionLayer2")
+
+reluActivated2 = tf.nn.relu(convolutionLayer2, name = "relu2")
+poolingLayer2 = tf.layers.max_pooling2d(inputs=reluActivated2, pool_size=[2, 2],
+                                        strides = [2, 2], padding='SAME',
+                                         name="poolingLayer2")
+bn2 = batchNormalization(poolingLayer2, isTraining, "batchNormalization2")
+flattened = flattenLayer(bn2, name = "flattenedLayer")
+fc1 = fullyConnectedLayer(flattened, 1000)
+reluActivated3 = tf.nn.relu(fc1, name = "relu3")
+fc2 = fullyConnectedLayer(reluActivated3, 500)
+reluActivated4 = tf.nn.relu(fc2, name = "relu4")
+output = fullyConnectedLayer(reluActivated4, 10)
+```
+![image](https://drive.google.com/uc?export=view&id=1yAuXTfHAGVOj1kbJeJ2RLKduifJmNgn4)
+### 8.2 Loss function
+```python
+predictions = tf.argmax(tf.nn.softmax(output), axis = 1)
+actual = tf.argmax(yTrue, axis = 1)
+loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=output, labels = yTrue)
+costFunction = tf.reduce_mean(loss)
+optimizer = tf.train.GradientDescentOptimizer(1e-2).minimize(costFunction)
+accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, actual), tf.float32))
+```
+
+### 8.3 Training
+```python
+session = tf.Session()
+"""Initialize the global variables"""
+session.run(tf.global_variables_initializer())
+
+summaryWriter =  tf.summary.FileWriter("tensorboard/structure4/logs",
+ graph=tf.get_default_graph())
+trainAccList = []
+testAccList = []
+for i in range(0, 20):
+    print("Epoch "+str(i))
+    summary = tf.Summary()
+
+    for x, y in batchIterator(trainX, trainY, 500, 100):
+        session.run(optimizer, feed_dict={inputLayer:x,
+                      yTrue:y, isTraining:True})
+
+    loss = session.run(costFunction, feed_dict={inputLayer:x, yTrue:y,
+     isTraining:False})
+    acc = session.run(accuracy, feed_dict={inputLayer:x, yTrue:y,
+     isTraining:False})    
+    summary.value.add(tag = "TrainingLoss", simple_value = loss)
+    summary.value.add(tag = "TrainingAcc", simple_value = acc)
+    trainAccList.append(acc)
+
+    lossTestList = []
+    accTestList = []
+    for x, y in batchIterator(processedTestX, processedTestY, 1000, 5):
+        lossTest = session.run(costFunction, feed_dict={inputLayer:x, yTrue:y,
+         isTraining:False})
+        accTest = session.run(accuracy, feed_dict={inputLayer:x, yTrue:y,
+         isTraining:False})
+        lossTestList.append(lossTest)
+        accTestList.append(accTest)
+    print(np.mean(accTestList))
+    summary.value.add(tag = "TestLoss", simple_value = np.mean(lossTestList))
+    summary.value.add(tag = "TestAcc", simple_value = np.mean(accTestList))
+    testAccList.append(np.mean(accTestList))
+    summaryWriter.add_summary(summary, i)
+```
+
+### 8.4 Performance
+![image](https://drive.google.com/uc?export=view&id=19Vpdfid6lVQgUGPk6Lz2PfHeyQJp4Skn)
+![image](https://drive.google.com/uc?export=view&id=1D8tCqGWPxdoKjmtdoaRG-v0Sc7aiiUbg)
+![image](https://drive.google.com/uc?export=view&id=1KrSlpjyrS6S0rojOtiXXCgeSM_HL0Eg5)
+
+## 9 Training Model#5
+### 9.1 Structure
+Dropout added to the structure 4.
+* Input layer
+* Convolution
+* RELU
+* Pooling
+* Batch Normalization
+* Dropout
+* Convolution
+* RELU
+* Pooling
+* Batch Normalization
+* Dropout
+* Flattened
+* Fully connected layer
+* RELU
+* Fully connected layer
+* RELU
+* Fully connected layer
+* Softmax
+
+```python
+"""Input is 4 dimensional tensor -1 so that the no of images can be infered on itself"""
+inputLayer = tf.placeholder(tf.float32, [None, 32, 32, 3], name="inputLayer")
+yTrue = tf.placeholder(tf.float32, shape=[None, 10], name="yTrue")
+isTraining = tf.placeholder(tf.bool, [])
+probability = tf.placeholder(tf.float32)
+
+convolutionLayer1 = createConvolutionLayer(inputLayer, 2, 2, 32, 1, 1,
+ "convolutionLayer1")
+reluActivated1 = tf.nn.relu(convolutionLayer1, name = "relu1")
+poolingLayer1 = tf.layers.max_pooling2d(inputs=reluActivated1, pool_size=[2, 2],
+                                        strides = [1, 1], padding='SAME',
+                                         name="poolingLayer1")
+
+bn1 = batchNormalization(poolingLayer1, isTraining, "batchNormalization1")
+dropout1 = tf.nn.dropout(bn1, keep_prob = probability)
+convolutionLayer2 = createConvolutionLayer(dropout1, 2, 2, 20, 1, 1, "convolutionLayer2")
+
+reluActivated2 = tf.nn.relu(convolutionLayer2, name = "relu2")
+poolingLayer2 = tf.layers.max_pooling2d(inputs=reluActivated2, pool_size=[2, 2],
+                                        strides = [2, 2], padding='SAME',
+                                         name="poolingLayer2")
+bn2 = batchNormalization(poolingLayer2, isTraining, "batchNormalization2")
+dropout2 = tf.nn.dropout(bn2, keep_prob = probability)
+flattened = flattenLayer(dropout2, name = "flattenedLayer")
+fc1 = fullyConnectedLayer(flattened, 1000)
+reluActivated3 = tf.nn.relu(fc1, name = "relu3")
+fc2 = fullyConnectedLayer(reluActivated3, 500)
+reluActivated4 = tf.nn.relu(fc2, name = "relu4")
+output = fullyConnectedLayer(reluActivated4, 10)
+```
+
+### 9.2 Loss function
+```python
+predictions = tf.argmax(tf.nn.softmax(output), axis = 1)
+actual = tf.argmax(yTrue, axis = 1)
+loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=output, labels = yTrue)
+costFunction = tf.reduce_mean(loss)
+accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, actual), tf.float32))
+```
+
+### 9.3 Training
+```python
+summaryWriter =  tf.summary.FileWriter("tensorboard/structure5/logs",
+ graph=tf.get_default_graph())
+trainAccList = []
+testAccList = []
+for i in range(0, 20):
+    print("Epoch "+str(i))
+    summary = tf.Summary()
+
+    for x, y in batchIterator(trainX, trainY, 500, 100):
+        session.run(optimizer, feed_dict={inputLayer:x, yTrue:y, isTraining:True,
+         probability:0.6})
+
+    loss = session.run(costFunction, feed_dict={inputLayer:x, yTrue:y,
+     isTraining:False, probability:1})
+    acc = session.run(accuracy, feed_dict={inputLayer:x, yTrue:y, isTraining:False,
+     probability:1})    
+    summary.value.add(tag = "TrainingLoss", simple_value = loss)
+    summary.value.add(tag = "TrainingAcc", simple_value = acc)
+    trainAccList.append(acc)
+
+    lossTestList = []
+    accTestList = []
+    for x, y in batchIterator(processedTestX, processedTestY, 1000, 5):
+        lossTest = session.run(costFunction, feed_dict={inputLayer:x, yTrue:y,
+         isTraining:False, probability:1})
+        accTest = session.run(accuracy, feed_dict={inputLayer:x, yTrue:y,
+         isTraining:False, probability:1})
+        lossTestList.append(lossTest)
+        accTestList.append(accTest)
+    print(np.mean(accTestList))
+    summary.value.add(tag = "TestLoss", simple_value = np.mean(lossTestList))
+    summary.value.add(tag = "TestAcc", simple_value = np.mean(accTestList))
+    testAccList.append(np.mean(accTestList))
+    summaryWriter.add_summary(summary, i)
+```
+
+### 9.4 Performance
+The above structure was trained with different optimizers.
+#### 9.4.1 Gradient descent optimizer
+##### 9.4.1.1 Computation Graph
+![image](https://drive.google.com/uc?export=view&id=10X8saMqIQ5YJrgDNSgD4B7JK-a8g7lpe)
+##### 9.4.1.2 Results
+![image](https://drive.google.com/uc?export=view&id=1FHiJbPqh-oVfiAJf3I9DH2LDIAk2cz8C)
+![image](https://drive.google.com/uc?export=view&id=1wWjfidW_bpuABYkrpO2VUIABtLSzr_Se)
+![image](https://drive.google.com/uc?export=view&id=1neQpPa7Jb4ziSkkpyssi55DK3qrf5Gic)
+
+#### 9.4.2 RMSProp optimizer
+##### 9.4.2.1 Computation Graph
+![image](https://drive.google.com/uc?export=view&id=14HVjwLV022LyyLu0xuzTte-t7CZ5njMO)
+##### 9.4.2.2 Results
+![image](https://drive.google.com/uc?export=view&id=1PfT7X2aM-z2tsJJ68ziW-jGZx-wMsdNd)
+![image](https://drive.google.com/uc?export=view&id=1YnwzZYSTBHJGMZ5uAl6NNv22vxFDe1oH)
+![image](https://drive.google.com/uc?export=view&id=1AvArhIHsqmcitKPMZrZ5qE0iKFRx3iYy)
+
+
+#### 9.4.3 Adam optimizer
+##### 9.4.3.1 Computation Graph
+![image](https://drive.google.com/uc?export=view&id=1oG1PhXkVWmGnunsn-3R-2YQNyHOFrC9C)
+##### 9.4.3.2 Results
+![image](https://drive.google.com/uc?export=view&id=1uLNKCyloxnEPS998u5dq9pOsd-XIVHkQ)
+![image](https://drive.google.com/uc?export=view&id=1Zwlz8PrLWVV0mCYzUmYoZ5170nCacfAQ)
+![image](https://drive.google.com/uc?export=view&id=16df0j4nhlwBEaIX6rQ7Yye3xUV-M5L-K)
+
+
+## 10 Summary
+Following table has comparasion of test set loss with different setup. Best Performance is 75% on test set.
+
+
+<table>
+<th>Structure</th><th>Optimizer</th><th>Learning rate</th><th>Batch size </th><th>No of epochs</th><th>Testset</th>
+<tr rowspan = 7><td>    convolution<br/>
+    relu<br/>
+    maxpooling<br/>
+    fully connected layer<br/>
+    relu<br/>
+    fully connected layer<br/>
+    softmax<br/></td><td>Adam</td><td>0.001</td><td>500 X 50</td><td>50</td><td>0.449</td></tr>
+<tr><td> Convolution<br/>
+ SELU<br/>
+ Pooling<br/>
+ Batch Normalization<br/>
+ Pooling<br/>
+ Fully connected layer<br/>
+ SELU<br/>
+ Fully connected layer<br/>
+ SELU<br/>
+ Fully connected layer<br/>
+ Softmax<br/></td><td>Adam</td><td>0.001</td><td>500 X 50</td><td>50</td><td>0.61</td></tr>
+<tr><td> Input layer<br/>
+ Convolution<br/>
+ RELU<br/>
+ Pooling<br/>
+ Convolution<br/>
+ RELU<br/>
+ Pooling<br/>
+ Flattened<br/>
+ Fully connected layer<br/>
+ RELU<br/>
+ Fully connected layer<br/>
+ RELU<br/>
+ Fully connected layer<br/>
+ Softmax<br/></td><td>Gradient descent</td><td>0.001</td><td>500 X 100</td><td>20</td><td>0.6</td></tr>
+<tr><td> Input layer<br/>
+ Convolution<br/>
+ RELU<br/>
+ Pooling<br/>
+ Batch Normalization<br/>
+ Convolution<br/>
+ RELU<br/>
+ Pooling<br/>
+ Batch Normalization<br/>
+ Flattened<br/>
+ Fully connected layer<br/>
+ RELU<br/>
+ Fully connected layer<br/>
+ RELU<br/>
+ Fully connected layer<br/>
+ Softmax<br/></td><td>Gradient descent</td><td>0.001</td><td>500 X 100</td><td>20</td><td>0.65</td></tr>
+<tr><td> Input layer<br/>
+ Convolution<br/>
+ RELU<br/>
+ Pooling<br/>
+ Batch Normalization<br/>
+ Dropout<br/>
+ Convolution<br/>
+ RELU<br/>
+ Pooling<br/>
+ Batch Normalization<br/>
+ Dropout<br/>
+ Flattened<br/>
+ Fully connected layer<br/>
+ RELU<br/>
+ Fully connected layer<br/>
+ RELU<br/>
+ Fully connected layer<br/>
+ Softmax<br/></td><td>Gradient descent</td><td>0.001</td><td>500 X 100</td><td>20</td><td>0.59</td></tr>
+ <tr><td> Input layer<br/>
+  Convolution<br/>
+  RELU<br/>
+  Pooling<br/>
+  Batch Normalization<br/>
+  Dropout<br/>
+  Convolution<br/>
+  RELU<br/>
+  Pooling<br/>
+  Batch Normalization<br/>
+  Dropout<br/>
+  Flattened<br/>
+  Fully connected layer<br/>
+  RELU<br/>
+  Fully connected layer<br/>
+  RELU<br/>
+  Fully connected layer<br/>
+  Softmax<br/></td><td>RMS Prop</td><td>0.001</td><td>500 X 100</td><td>20</td><td>0.69</td></tr>
+  <tr><td> Input layer<br/>
+   Convolution<br/>
+   RELU<br/>
+   Pooling<br/>
+   Batch Normalization<br/>
+   Dropout<br/>
+   Convolution<br/>
+   RELU<br/>
+   Pooling<br/>
+   Batch Normalization<br/>
+   Dropout<br/>
+   Flattened<br/>
+   Fully connected layer<br/>
+   RELU<br/>
+   Fully connected layer<br/>
+   RELU<br/>
+   Fully connected layer<br/>
+   Softmax<br/></td><td>Adam</td><td>0.001</td><td>500 X 100</td><td>20</td><td>0.75</td></tr>
+</table>
